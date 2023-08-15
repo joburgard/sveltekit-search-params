@@ -182,7 +182,7 @@ export function queryParameters<T extends object>(
                     ) {
                         fnToCall = optionsKey.encode;
                     }
-                    let newValue = fnToCall((value as any)[field]);
+                    const newValue = fnToCall((value as any)[field]);
                     if (newValue == undefined) {
                         query.delete(field as string);
                     } else {
@@ -263,7 +263,7 @@ export function queryParam<T = string>(
                 if (value == undefined) {
                     query.delete(name);
                 } else {
-                    let newValue = encode(value);
+                    const newValue = encode(value);
                     if (newValue == undefined) {
                         query.delete(name);
                     } else {
