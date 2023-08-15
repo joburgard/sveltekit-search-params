@@ -31,6 +31,7 @@ export type EncodeAndDecodeOptions<T = any> = {
 };
 
 export type StoreOptions = {
+    debounceChange?: number;
     debounceHistory?: number;
     pushHistory?: boolean;
 };
@@ -159,10 +160,15 @@ const debouncedTimeouts = new Map<string, SetTimeout>();
 
 export function queryParameters<T extends object>(
     options?: Options<T>,
-    { debounceHistory = 0, pushHistory = true }: StoreOptions = {}
+    {
+        debounceChange = 0,
+        debounceHistory = 0,
+        pushHistory = true,
+    }: StoreOptions = {}
 ): Writable<LooseAutocomplete<T>> {
     const { set: _set, subscribe } = writable<LooseAutocomplete<T>>();
     const setRef: { value: Writable<T>['set'] } = { value: noop };
+    let pushHistoryOnNextChange = false;
     const unsubPage = page.subscribe(($page) => {
         setRef.value = (value) => {
             const hash = $page.url.hash;
@@ -196,16 +202,34 @@ export function queryParameters<T extends object>(
                 batchedUpdates.forEach((batched) => {
                     batched(query);
                 });
-                clearTimeout(debouncedTimeouts.get('queryParameters'));
-                if(browser) await goto(`?${query}${hash}`, GOTO_OPTIONS);
-                if (pushHistory && browser) {
-                    debouncedTimeouts.set(
-                        'queryParameters',
-                        setTimeout(() => {
-                            goto(hash, GOTO_OPTIONS_PUSH);
-                        }, debounceHistory)
-                    );
-                }
+
+                clearTimeout(debouncedTimeouts.get('queryParametersRequest'));
+                clearTimeout(debouncedTimeouts.get('queryParametersHistory'));
+
+                debouncedTimeouts.set(
+                    'queryParametersRequest',
+                    setTimeout(async () => {
+                        if (browser) {
+                            await goto(
+                                `?${query}${hash}`,
+                                pushHistoryOnNextChange
+                                    ? GOTO_OPTIONS_PUSH
+                                    : GOTO_OPTIONS
+                            );
+
+                            pushHistoryOnNextChange = false;
+
+                            if (pushHistory) {
+                                debouncedTimeouts.set(
+                                    'queryParametersHistory',
+                                    setTimeout(() => {
+                                        pushHistoryOnNextChange = true;
+                                    }, debounceHistory)
+                                );
+                            }
+                        }
+                    }, debounceChange)
+                );
                 batchedUpdates.clear();
             });
         };
@@ -251,10 +275,15 @@ export function queryParam<T = string>(
         decode: decode = DEFAULT_ENCODER_DECODER.decode,
         defaultValue,
     }: EncodeAndDecodeOptions<T> = DEFAULT_ENCODER_DECODER,
-    { debounceHistory = 0, pushHistory = true }: StoreOptions = {}
+    {
+        debounceChange = 0,
+        debounceHistory = 0,
+        pushHistory = true,
+    }: StoreOptions = {}
 ): Writable<T | null> {
     const { set: _set, subscribe } = writable<T | null>();
     const setRef: { value: Writable<T | null>['set'] } = { value: noop };
+    let pushHistoryOnNextChange = false;
     const unsubPage = page.subscribe(($page) => {
         const actualParam = $page?.url?.searchParams?.get?.(name);
         setRef.value = (value) => {
@@ -278,16 +307,35 @@ export function queryParam<T = string>(
                 batchedUpdates.forEach((batched) => {
                     batched(query);
                 });
-                clearTimeout(debouncedTimeouts.get(name));
-                if(browser) await goto(`?${query}${hash}`, GOTO_OPTIONS);
-                if (pushHistory && browser) {
-                    debouncedTimeouts.set(
-                        name,
-                        setTimeout(() => {
-                            goto(hash, GOTO_OPTIONS_PUSH);
-                        }, debounceHistory)
-                    );
-                }
+
+                clearTimeout(debouncedTimeouts.get(`${name}Request`));
+                clearTimeout(debouncedTimeouts.get(`${name}History`));
+
+                debouncedTimeouts.set(
+                    `${name}Request`,
+                    setTimeout(async () => {
+                        if (browser) {
+                            await goto(
+                                `?${query}${hash}`,
+                                pushHistoryOnNextChange
+                                    ? GOTO_OPTIONS_PUSH
+                                    : GOTO_OPTIONS
+                            );
+
+                            pushHistoryOnNextChange = false;
+
+                            if (pushHistory) {
+                                debouncedTimeouts.set(
+                                    `${name}History`,
+                                    setTimeout(() => {
+                                        pushHistoryOnNextChange = true;
+                                    }, debounceHistory)
+                                );
+                            }
+                        }
+                    }, debounceChange)
+                );
+
                 batchedUpdates.clear();
             });
         };
